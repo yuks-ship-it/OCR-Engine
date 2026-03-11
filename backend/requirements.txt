@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+opencv-python
+numpy
+ultralytics
+pytesseract
+pyzbar
+python-multipart
+pillow
+easyocr

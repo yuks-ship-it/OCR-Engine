@@ -1,0 +1,7 @@
+path: C:/Users/Yukesh Dhakal/OneDrive/Documents/Desktop/ocr_system/dataset
+train: images/train
+val: images/val
+
+
+nc: 1
+names: ['board']

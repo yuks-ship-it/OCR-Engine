@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Board OCR System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Board OCR Scanner</h1>
+            <p>Real-time text field and board detection</p>
+        </header>
+        
+        <main>
+            <div class="camera-section">
+                <div class="video-wrapper">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas"></canvas>
+                </div>
+                <div class="controls">
+                    <button id="captureBtn" class="btn primary">Manual Capture</button>
+                    <button id="autoScanBtn" class="btn secondary">Start Auto Scan</button>
+                </div>
+            </div>
+            
+            <div id="results" class="results-section">
+                <h2>Scan Results</h2>
+                <div id="output" class="output-container">
+                    <p class="placeholder">Awaiting scan data...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
