@@ -1,147 +1,170 @@
-const video = document.getElementById('video');
-const canvas = document.getElementById('canvas');
-const captureBtn = document.getElementById('captureBtn');
-const autoScanBtn = document.getElementById('autoScanBtn');
-const output = document.getElementById('output');
+const video        = document.getElementById('video');
+const canvas       = document.getElementById('canvas');
+const captureBtn   = document.getElementById('captureBtn');
+const autoScanBtn  = document.getElementById('autoScanBtn');
+const output       = document.getElementById('output');
+const statusBadge  = document.getElementById('status-badge');
+const videoWrapper = document.querySelector('.video-wrapper');
 
 let isAutoScanning = false;
-let scanInterval = null;
-let isProcessing = false;
+let scanInterval   = null;
+let isProcessing   = false;
 
-// Access the camera
+// ── Camera ────────────────────────────────────────────────────────────────────
 async function startCamera() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' }
+        });
         video.srcObject = stream;
-        
-        // Wait for video to be ready before setting canvas size
         video.onloadedmetadata = () => {
-            adjustCanvasSize();
+            canvas.width  = video.videoWidth;
+            canvas.height = video.videoHeight;
         };
-        
-        // Adjust canvas size on window resize to keep it perfectly overlapping the video
-        window.addEventListener('resize', adjustCanvasSize);
     } catch (err) {
-        console.error("Camera access error:", err);
-        alert("Could not access camera. Please make sure you have granted permissions.");
+        setStatus('error');
+        output.innerHTML = `<div class="processing-state" style="color:var(--red)">
+            Camera access denied. Please grant permissions and reload.
+        </div>`;
     }
 }
 
-function adjustCanvasSize() {
-    // Make internal canvas resolution match the video stream resolution
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-}
-
+// ── Canvas ────────────────────────────────────────────────────────────────────
 function clearCanvas() {
-    const context = canvas.getContext('2d');
-    context.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
 }
 
 function drawBoundingBoxes(detections) {
-    const context = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d');
     clearCanvas();
-
     detections.forEach(det => {
         const [x1, y1, x2, y2] = det.bbox;
-        const width = x2 - x1;
-        const height = y2 - y1;
-
-        // Draw rectangle
-        context.strokeStyle = '#10b981'; // Success primary color
-        context.lineWidth = 4;
-        context.strokeRect(x1, y1, width, height);
-        
-        // Draw background for label
-        const label = `${det.class} (${(det.confidence * 100).toFixed(1)}%)`;
-        context.fillStyle = '#10b981';
-        context.font = '18px Inter, sans-serif';
-        const textWidth = context.measureText(label).width;
-        context.fillRect(x1, y1 - 24, textWidth + 8, 24);
-
-        // Draw label text
-        context.fillStyle = '#ffffff';
-        context.fillText(label, x1 + 4, y1 - 6);
+        ctx.strokeStyle = '#00e5a0';
+        ctx.lineWidth   = 3;
+        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+        const label = `${det.class} ${((det.detection_confidence || det.confidence || 0) * 100).toFixed(0)}%`;
+        ctx.font = '14px monospace';
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = '#00e5a0';
+        ctx.fillRect(x1, y1 - 22, tw + 10, 22);
+        ctx.fillStyle = '#080e1a';
+        ctx.fillText(label, x1 + 5, y1 - 6);
     });
 }
 
+// ── Status ────────────────────────────────────────────────────────────────────
+function setStatus(state) {
+    const labels = { idle: 'Idle', scanning: 'Scanning...', done: 'Done', error: 'Error' };
+    statusBadge.className   = `status-badge ${state}`;
+    statusBadge.textContent = labels[state] || state;
+}
+
+// ── Field Row helper ──────────────────────────────────────────────────────────
+function fieldRow(label, value, colorClass) {
+    const display = value
+        ? `<span class="field-value ${colorClass}">${value}</span>`
+        : `<span class="field-value empty">—</span>`;
+    return `
+        <div class="field-row">
+            <span class="field-label">${label}</span>
+            <span class="field-sep">:</span>
+            ${display}
+        </div>`;
+}
+
+// ── Format Results ────────────────────────────────────────────────────────────
 function formatResults(data) {
     if (!data.detections || data.detections.length === 0) {
-        return '<p class="placeholder">No boards detected in the current frame.</p>';
+        return `<div class="placeholder-state">
+                    <div class="placeholder-icon">no entry sign</div>
+                    <p>No boards detected in frame.</p>
+                </div>`;
     }
 
-    let html = '';
-    data.detections.forEach((det, index) => {
-        html += `<div class="detection-result" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 0.5rem; border: 1px solid rgba(255,255,255,0.1);">`;
-        html += `<h3 style="margin-top: 0; color: #60a5fa; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">Detection #${index + 1} <span style="font-size: 0.8em; color: #94a3b8;">(${det.class} - ${(det.confidence*100).toFixed(1)}%)</span></h3>`;
-        
-        // Parsed Fields
-        html += `<div style="margin-bottom: 1rem;">`;
-        if (det.parsed) {
-            if (det.parsed.marga) {
-                html += `<div style="margin-bottom: 0.4rem; font-size: 1.1em;"><span style="color: #94a3b8; display: inline-block; width: 120px;">मार्ग:</span> <strong style="color: #f8fafc;">${det.parsed.marga}</strong></div>`;
-            }
-            if (det.parsed.kataho_code) {
-                html += `<div style="margin-bottom: 0.4rem; font-size: 1.1em;"><span style="color: #94a3b8; display: inline-block; width: 120px;">Kataho Code:</span> <strong style="color: #10b981;">${det.parsed.kataho_code}</strong></div>`;
-            }
-            if (det.parsed.kid) {
-                html += `<div style="margin-bottom: 0.4rem; font-size: 1.1em;"><span style="color: #94a3b8; display: inline-block; width: 120px;">KID:</span> <strong style="color: #60a5fa;">${det.parsed.kid}</strong></div>`;
-            }
-            if (det.parsed.plus_code) {
-                html += `<div style="margin-bottom: 0.4rem; font-size: 1.1em;"><span style="color: #94a3b8; display: inline-block; width: 120px;">Plus code:</span> <strong style="color: #f59e0b;">${det.parsed.plus_code}</strong></div>`;
-            }
-        }
-        html += `</div>`;
+    return data.detections.map((det, i) => {
+        // Support both key names from backend (parsed_fields or parsed)
+        const p  = det.parsed_fields || det.parsed || {};
+        const qr = det.qr_data || [];
 
-        if (det.qr_data && det.qr_data.length > 0) {
-            html += `<div style="margin-bottom: 0.5rem;"><span style="color: #94a3b8;">QR Data:</span> <span style="color: white; background: rgba(0,0,0,0.5); padding: 0.2rem 0.5rem; border-radius: 0.25rem;">${det.qr_data.join(', ')}</span></div>`;
+        // Build QR value string
+        let qrValue = null;
+        if (qr.length > 0) {
+            qrValue = qr.map(q => typeof q === 'object' ? q.data : q).join(' | ');
         }
-        
-        html += `<details style="margin-top: 0.5rem;">`;
-        html += `<summary style="color: #94a3b8; cursor: pointer; font-size: 0.9em;">Show Raw OCR Text</summary>`;
-        html += `<div style="margin-top: 0.5rem; color: #cbd5e1; font-size: 0.85em; background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 0.25rem;">${det.ocr_text || 'None'}</div>`;
-        html += `</details>`;
-        
-        html += `</div>`;
-    });
-    return html;
+
+        const ocrConf = det.ocr_confidence != null
+            ? `${(det.ocr_confidence * 100).toFixed(0)}%`
+            : '';
+
+        return `
+        <div class="field-card">
+            <div class="field-card-title">
+                Detection #${i + 1} &nbsp;&middot;&nbsp; ${det.class || 'board'}
+                ${ocrConf ? `&nbsp;&middot;&nbsp; OCR ${ocrConf}` : ''}
+            </div>
+
+            <div class="field-table">
+                ${fieldRow('&#2350;&#2366;&#2352;&#2381;&#2327;',  p.marga,       'marga')}
+                ${fieldRow('Kataho Code', p.kataho_code, 'kataho')}
+                ${fieldRow('KID',         p.kid,         'kid')}
+                ${fieldRow('Plus Code',   p.plus_code,   'plus')}
+                ${fieldRow('Ward No',     p.ward_no,     'ward')}
+                ${fieldRow('Location',    p.location,    'location')}
+                ${fieldRow('QR Code',     qrValue,       'qr')}
+            </div>
+
+            <details class="raw-toggle">
+                <summary>&#9658; Show Raw OCR Text</summary>
+                <div class="raw-text">${det.ocr_text || 'No text detected'}</div>
+            </details>
+        </div>`;
+    }).join('');
 }
 
-// Capture a frame and send to backend
+// ── Capture & Process ─────────────────────────────────────────────────────────
 async function captureAndProcess() {
-    if (isProcessing) return; // Prevent overlapping requests
+    if (isProcessing) return;
     isProcessing = true;
+    setStatus('scanning');
 
-    // We use a temporary canvas to get the exact video frame for sending to API
+    output.innerHTML = `<div class="processing-state">
+        <div class="spinner"></div> Processing frame...
+    </div>`;
+
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = video.videoWidth;
+    tempCanvas.width  = video.videoWidth;
     tempCanvas.height = video.videoHeight;
-    const context = tempCanvas.getContext('2d');
-    context.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+    tempCanvas.getContext('2d').drawImage(video, 0, 0);
 
-    // Convert canvas to blob
     tempCanvas.toBlob(async (blob) => {
         const formData = new FormData();
         formData.append('file', blob, 'capture.jpg');
 
         try {
-            output.innerHTML = '<span style="color: #94a3b8;">Processing...</span>';
             const response = await fetch('/api/process', {
                 method: 'POST',
                 body: formData
             });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.detail || `Server error ${response.status}`);
+            }
+
             const data = await response.json();
-            
+
             if (data.success) {
                 drawBoundingBoxes(data.detections);
                 output.innerHTML = formatResults(data);
+                setStatus('done');
             } else {
-                output.innerHTML = '<span style="color: #ef4444;">Error: Invalid response from server.</span>';
-                clearCanvas();
+                throw new Error('Invalid response from server');
             }
         } catch (err) {
-            console.error("API error:", err);
-            output.innerHTML = '<span style="color: #ef4444;">Connection error. Make sure the backend is running.</span>';
+            output.innerHTML = `<div class="processing-state" style="color:var(--red)">
+                Error: ${err.message}
+            </div>`;
+            setStatus('error');
             clearCanvas();
         } finally {
             isProcessing = false;
@@ -149,33 +172,30 @@ async function captureAndProcess() {
     }, 'image/jpeg');
 }
 
+// ── Auto Scan ─────────────────────────────────────────────────────────────────
 function toggleAutoScan() {
     isAutoScanning = !isAutoScanning;
-    
+
     if (isAutoScanning) {
         autoScanBtn.textContent = 'Stop Auto Scan';
         autoScanBtn.classList.add('active');
         captureBtn.disabled = true;
-        captureBtn.style.opacity = '0.5';
-        
-        // Immediate first scan, then set interval
+        videoWrapper.classList.add('scanning');
         captureAndProcess();
-        scanInterval = setInterval(captureAndProcess, 1500); // 1.5 seconds interval
+        scanInterval = setInterval(captureAndProcess, 1500);
     } else {
-        autoScanBtn.textContent = 'Start Auto Scan';
+        autoScanBtn.innerHTML = '<span class="btn-icon">&#128260;</span> Start Auto Scan';
         autoScanBtn.classList.remove('active');
         captureBtn.disabled = false;
-        captureBtn.style.opacity = '1';
-        
+        videoWrapper.classList.remove('scanning');
         clearInterval(scanInterval);
         isProcessing = false;
-        clearCanvas(); // Clear bounding boxes when stopping
+        setStatus('idle');
+        clearCanvas();
     }
 }
 
-// Event listeners
+// ── Init ──────────────────────────────────────────────────────────────────────
 captureBtn.addEventListener('click', captureAndProcess);
 autoScanBtn.addEventListener('click', toggleAutoScan);
-
-// Start camera on page load
 startCamera();
