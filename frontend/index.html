@@ -9,10 +9,11 @@
 <body>
     <div class="app-container">
         <header>
-            <h1>Board OCR Scanner</h1>
-            <p>Real-time text field and board detection</p>
-        </header>
-        
+        <h1>Board OCR Scanner</h1>
+        <p>Real-time text field and board detection</p>
+        <span id="status-badge" class="status-badge idle">Idle</span>
+</header>
+
         <main>
             <div class="camera-section">
                 <div class="video-wrapper">
@@ -21,10 +22,12 @@
                 </div>
                 <div class="controls">
                     <button id="captureBtn" class="btn primary">Manual Capture</button>
-                    <button id="autoScanBtn" class="btn secondary">Start Auto Scan</button>
+                    <button id="autoScanBtn" class="btn secondary">
+                        <span class="btn-icon">&#128260;</span> Start Auto Scan
+                    </button>
                 </div>
             </div>
-            
+
             <div id="results" class="results-section">
                 <h2>Scan Results</h2>
                 <div id="output" class="output-container">
